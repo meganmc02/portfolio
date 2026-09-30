@@ -1,0 +1,23 @@
+---
+title: "My Beautiful Quarto Presentation"
+format: 
+  revealjs:
+    progress: true   
+    transition: fade
+    slide-number: true
+    margin: 0.075
+    center: true
+editor: visual
+date: 23 Sep 2026
+author:
+ - name: Megan McEntee.
+   orcid: 0009-0007-4403-0286
+---
+
+## Favorite Equation
+
+I must admit, I'm rather unopinionated about equations. However, one that's always thrilling (some may say) is, $$\tan(\theta) = \frac{\sin( \theta)} {\cos( \theta)}. $$
+
+## Random Source of Information
+
+-   I love to go on long runs while listening to the soundtracks of musicals.
