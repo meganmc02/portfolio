@@ -1,0 +1,62 @@
+---
+title: "My Reproducible Manuscript"
+author: "Megan McEntee"
+format: 
+  pdf: default
+bibliography: references.bib
+execute: 
+  warning: false
+---
+
+```{r}
+#| label: necessary-packages
+#| echo: false
+library(ggplot2)
+```
+
+# Meet Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org.>
+
+# Meet the penguins
+
+The penguins data from the [palmerpenguins](https://allisonhorst.github.io/palmerpenguins/) package [@horstPalmerArchipelagoPenguins2022] contains size measurements for 344 penguins from three species observed on three islands in the Palmer Archipelago, Antarctica.
+
+![penguins](https://allisonhorst.github.io/palmerpenguins/reference/figures/lter_penguins.png)
+
+The Penguin dataset took inspiration from the Isis dataset, which @mithyClassificationIrisFlower2022 states is one of the most famous datasets.
+
+# Results
+
+```{r}
+#| echo: FALSE
+#| fig-cap: "Figure of Flipper vs Culman length" 
+# Read data
+penguins <- read.csv("../data/data.csv")
+
+# Plot penguins
+ggplot(penguins, 
+       aes(x = `Flipper.Length..mm.`, y = `Culmen.Length..mm.`)) +
+        geom_point(aes(color = Species, shape = Species)) +
+        scale_color_manual(values = c("darkorange","purple","cyan4")) +
+        labs(
+                title = "Flipper and Culmen length",
+                subtitle = "Dimensions for penguins at Palmer Station LTER",
+                x = "Flipper length (mm)", y = "Culmen length (mm)",
+                color = "Penguin species", shape = "Penguin species"
+        ) +
+        theme_minimal()
+```
+
+The above plot is very interesting. It shows that there are clearly more than `r 25+25` penguins in this dataset, more specifically there are `r nrow(penguins)` penguins in total! From this total there are `r sum(penguins$Species=='Gentoo penguin (Pygoscelis papua)')` Gentoo species of penguins and `r sum(penguins$Species=='Chinstrap penguin (Pygoscelis antarctica)')` Chinstrap within the data.
+
+# Import a Script
+```{r}
+#| file: "../scripts/do_addition.R"
+#| eval: true 
+```
+
+```{r}
+do_addition(22,33)
+```
+
