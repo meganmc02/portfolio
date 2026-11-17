@@ -1,0 +1,167 @@
+---
+title: "my-reproducible-simulation-manuscript"
+format: html
+execute: 
+  warning: false
+---
+
+```{r echo=FALSE}
+#| label: necessary-packages
+#| echo: false
+
+if (!requireNamespace("Hmisc")){
+  install.packages("Hmisc")
+}
+if (!requireNamespace("mice")){
+  install.packages("mice")
+}
+if (!requireNamespace("tidyverse")){
+  install.packages("tidyverse")
+}
+library(Hmisc)
+library(mice)
+library(tidyverse)
+```
+
+```{r echo=FALSE}
+#| file: "../scripts/mergedata.R"
+```
+
+# Data
+
+The data can be downloaded in xpt form from [here](https://wwwn.cdc.gov/nchs/nhanes/continuousnhanes/default.aspx?BeginYear=2015). Save all necessary files and read them in.
+
+```{r include=FALSE}
+d1 <- sasxport.get("../data/DEMO_I.xpt")
+d2 <- sasxport.get("../data/BPX_I.xpt")
+d3 <- sasxport.get("../data/BMX_I.xpt")
+d4 <- sasxport.get("../data/GHB_I.xpt")
+d5 <- sasxport.get("../data/TCHOL_I.xpt")
+```
+
+Merge the data sets and select the variables of interest.
+
+```{r}
+d <- multimerge(d1,d2,d3,d4,d5, varname="seqn")
+d <- subset(d, select=c("seqn","riagendr","ridageyr","bpxsy1","bmxbmi","lbxgh","lbdtcsi"))
+```
+
+Rename the variables:
+
+| Original name | New name | Description                           |
+|---------------|----------|---------------------------------------|
+| RIAGENDR      | sex      | Gender                                |
+| RIDAGEYR      | age      | Age in years at screening             |
+| BPXSY1        | bp       | Systolic: Bloody pres (1st rdg) mm Hg |
+| BMXBMI        | bmi      | Body Mass Index (kg/m\*\*2)           |
+| LBDTCSI       | chol     | Total Cholesterol (mmol/L)            |
+| LBXGH         | HbA1C    | Glycohemoglobin (%)                   |
+
+(Adjust age by replacing all ages lower than 18 with NA.)
+
+```{r}
+d$age <- d$ridageyr
+d$sex <- d$riagendr
+d$bp <- d$bpxsy1
+d$bmi <- d$bmxbmi
+d$HbA1C <- d$lbxgh
+d$chol <- d$lbdtcsi
+d$age[d$age<18] <- NA # Replacing ages lower than 18 with NA
+```
+
+Select complete cases. This removes all participants bellow the age of 18.
+
+```{r}
+dc <- cc(subset(d,select=c("age","sex","bmi","HbA1C","bp")))
+```
+
+# Perform Analysis:
+First applying multivariable linear regression on data with no measurement error added.
+
+Estimating the effect of HbA1c on systolic blood pressure, adjusting for age and gender. Extract summary and confidence intervals.
+
+```{r}
+summary(lm(bp ~ HbA1C + age + as.factor(sex), data=dc))
+confint(lm(bp ~ HbA1C + age + as.factor(sex), data=dc))
+```
+
+HbA1c estimated to increase systolic blood pressure by 1.13mmHg (95% CI 0.73 to 1.52) per unit increase in HbA1c.
+
+Additionally adjusting for bmi (alongside age and gender). Again extracting summary and confidence intervals.
+
+```{r}
+summary(lm(bp ~ HbA1C + bmi + age + as.factor(sex), data=dc))
+confint(lm(bp ~ HbA1C + bmi + age + as.factor(sex), data=dc))
+```
+
+HbA1c estimated to increase systolic blood pressure by 0.75 mmHg (95% CI 0.35 to 1.16) per unit increase in HbA1c.
+
+Difference in estimated effect sizes could be due to bias generated from measurement error in exposure and/or confounding variable(s).
+
+Extract HbA1C regression coefficient. This is assumed to have no measurement error and is a reference point.
+
+```{r}
+ref <- lm(bp ~ HbA1C + bmi + age + as.factor(sex), data=dc)$coef[2]
+```
+
+## Data Generating Mechanism
+
+Add normal distributed random error to the exposure of interest **HbA1c** and/or the confounder **BMI**.
+
+```{r}
+n.sim <- 1e3                                        # Number of repetitions is 1000
+perc.me.exp <- seq(0,.5,.1)                         # Measurement error in exposure variable (HbA1c) varies between 0%-50%
+perc.me.conf<- seq(0,.5,.1)                         # Measurement error in confounder variable (BMI) varies between 0%-50%
+scenarios <- expand.grid(perc.me.exp,perc.me.conf)  # Extract every combination of measurement error in exposure and confounder variable
+var.exp <- var(dc$HbA1C)
+var.conf <- var(dc$bmi)
+n <- dim(dc)[1]
+```
+
+Add random noise using every variance scenario. Repeat each scenario 1000 times.
+
+```{r include=FALSE}
+beta.hat <- matrix(ncol=dim(scenarios)[1], nrow=n.sim)
+for (k in 1:n.sim){
+  print(k)
+  set.seed(k)
+  for (i in 1:dim(scenarios)[1]){
+    var.me.exp <- var.exp*scenarios[i,1]/(1-scenarios[i,1])
+    var.me.conf <- var.conf*scenarios[i,2]/(1-scenarios[i,2])
+    dc$HbA1C.me <- dc$HbA1C + rnorm(dim(dc)[1], 0, sqrt(var.me.exp) )
+    dc$bmi.me <- dc$bmi + rnorm(dim(dc)[1], 0, sqrt(var.me.conf) )
+    beta.hat[k,i] <- lm(bp ~ HbA1C.me + age + bmi.me + as.factor(sex), data=dc)$coef[2]
+  }}
+```
+
+## Performance Measure
+
+Assess Bias in regression coefficient for exposure of interest **HbA1c**.
+
+```{r echo=FALSE}
+tot.mat <- cbind(100*scenarios,apply(beta.hat,2,mean))
+colnames(tot.mat) <- c("me.exp","me.conf","estimate")
+FIGURE <- ggplot(tot.mat, aes(me.exp, me.conf)) +
+  geom_tile(color="white",aes(fill = estimate)) +
+  geom_text(aes(label = round(estimate, 2))) +
+  scale_fill_gradient2(low="#D55E00",mid="white",high = "#56B4E9", midpoint=ref) +
+  labs(x=paste("% of total variance of HbA1c due to measurement error"),
+       y=paste("% of total variance of BMI due to measurement error")) +
+  coord_equal()+
+  scale_y_continuous(breaks=unique(tot.mat[,1]))+
+  scale_x_continuous(breaks=unique(tot.mat[,1]))+
+  theme(panel.background = element_rect(fill='white', colour='grey'),
+        plot.title=element_text(hjust=0),
+        axis.ticks=element_blank(),
+        axis.title=element_text(size=12),
+        axis.text=element_text(size=10),
+        legend.title=element_text(size=12),
+        legend.text=element_text(size=10))
+FIGURE
+```
+
+-   Adding measurement error to HbA1c alone (the exposure) weakens its estimated effect on systolic blood pressure.
+
+-   Adding measurement error to BMI alone (the confounder) strengthens the estimated effect of HbA1c on systolic blood pressure (adjusting for BMI becomes less effective and the estimate moves toward the unadjusted value (1.13 mmHg)).
+
+-    Adding measurement error to both variables causes the two effects to partly cancel out, so the estimated effect changes only slightly. Measurement error in HbA1c was slightly more influential than measurement error in BMI.
